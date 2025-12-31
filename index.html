@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Tetris Mobile - Luisa e Catharina</title>
+<title>Tetris Luisa & Catharina - Mobile</title>
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
@@ -11,6 +11,7 @@
     box-sizing: border-box;
     font-family: Arial, Helvetica, sans-serif;
 }
+
 body {
     margin: 0;
     background-color: #000;
@@ -20,58 +21,122 @@ body {
     align-items: center;
     min-height: 100vh;
 
-    /* FOTO DE FUNDO (arquivo background.png no GitHub) */
+    /* Foto de fundo */
     background-image: url("background.png");
     background-repeat: no-repeat;
     background-position: center top;
     background-size: contain;
 }
 
+#title {
+    margin-top: 6px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.4;
+    text-shadow: 0 0 4px #000;
+}
+
+#title strong {
+    font-size: 16px;
+}
+
 #game-container {
-    margin-top: 12px;
+    margin-top: 10px;
     padding: 10px;
-    background: rgba(0,0,0,0.55);
+    background: rgba(0,0,0,0.35);  /* mais transparente pra foto aparecer */
     border-radius: 16px;
+    display: flex;
+    gap: 10px;
+}
+
+/* em telas bem estreitas, empilha */
+@media (max-width: 420px) {
+    #game-container {
+        flex-direction: column;
+        align-items: center;
+    }
 }
 
 #canvas {
-    display: block;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.45);
+}
+
+#sidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 13px;
+}
+
+#score-box {
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: rgba(0,0,0,0.4);
     border-radius: 8px;
+}
+
+#next-box {
+    margin-top: 8px;
+    padding: 6px;
     background: rgba(0,0,0,0.5);
+    border-radius: 10px;
+    border: 1px solid #fff;
+    text-align: center;
 }
 
-#info {
-    margin-top: 4px;
-    text-align: center;
+#next-box div {
+    margin-bottom: 4px;
     font-size: 13px;
+}
+
+#next-canvas {
+    background: #111;
+    border-radius: 6px;
+}
+
+#tips {
+    margin-top: 8px;
+    font-size: 12px;
+    text-align: center;
+    max-width: 140px;
+    line-height: 1.3;
     opacity: 0.9;
-}
-
-#info-top {
-    margin-top: 4px;
-    text-align: center;
-    font-size: 13px;
-    opacity: 0.95;
 }
 </style>
 </head>
 <body>
 
-<div id="info-top">
-    Criado por: Luiz Carlos — Luisa e Catharina 💖<br>
-    Toque para girar · Arraste para mover/baixar
+<div id="title">
+    <strong>Tetris da Luisa & Catharina</strong><br>
+    Criado por: Luiz Carlos · Toque para girar · Arraste para mover/baixar
 </div>
 
 <div id="game-container">
     <canvas id="canvas" width="240" height="480"></canvas>
-    <div id="info">
-        Score: <span id="score">0</span> — Linhas: <span id="lines">0</span>
+
+    <div id="sidebar">
+        <div id="score-box">
+            Score: <span id="score">0</span><br>
+            Linhas: <span id="lines">0</span>
+        </div>
+
+        <div id="next-box">
+            <div>Próxima peça:</div>
+            <canvas id="next-canvas" width="80" height="80"></canvas>
+        </div>
+
+        <div id="tips">
+            ☝️ Toque rápido gira a peça<br>
+            👉 Arraste para os lados<br>
+            👇 Arraste para baixo acelera
+        </div>
     </div>
 </div>
 
 <script>
 // ===========================
-// ÁUDIO (toca no primeiro toque)
+// ÁUDIO (musica.mp3 na mesma pasta)
 // ===========================
 let bgm = new Audio("musica.mp3");
 bgm.loop = true;
@@ -81,8 +146,7 @@ function startMusic() {
     if (!musicStarted) {
         musicStarted = true;
         bgm.play().catch(() => {
-            // se falhar, deixa para tentar de novo no próximo toque
-            musicStarted = false;
+            musicStarted = false; // tenta de novo no próximo toque
         });
     }
 }
@@ -90,73 +154,72 @@ function startMusic() {
 // ===========================
 // CONFIGURAÇÃO DO TETRIS
 // ===========================
-const W = 10;          // largura em blocos
-const H = 20;          // altura em blocos
-const S = 24;          // tamanho de cada bloco em pixels
+const W = 10;   // largura em blocos
+const H = 20;   // altura em blocos
+const S = 24;   // tamanho do bloco (px)
 
 const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+const ctx    = canvas.getContext("2d");
 
-// ajusta o canvas exatamente ao tamanho do campo
 canvas.width  = W * S;
 canvas.height = H * S;
 
-const scoreSpan = document.getElementById("score");
-const linesSpan = document.getElementById("lines");
+const nextCanvas = document.getElementById("next-canvas");
+const nextCtx    = nextCanvas.getContext("2d");
 
-// campo e peças
+const scoreEl = document.getElementById("score");
+const linesEl = document.getElementById("lines");
+
 let field = new Array(W * H).fill(0);
 let tetromino = [];
 
-// peças (4x4)
-tetromino[0] = "..X." +
-               "..X." +
-               "..X." +
+// Peças 4x4
+tetromino[0] = "..X."+
+               "..X."+
+               "..X."+
                "..X."; // I
 
-tetromino[1] = "..X." +
-               ".XX." +
+tetromino[1] = "..X."+
+               ".XX."+
                ".X.." +
                "...."; // S
 
 tetromino[2] = ".X.." +
-               ".XX." +
-               "..X." +
+               ".XX."+
+               "..X."+
                "...."; // Z
 
-tetromino[3] = "...." +
-               ".XX." +
-               ".XX." +
+tetromino[3] = ".XX."+
+               ".XX."+
+               "...."+
                "...."; // O
 
-tetromino[4] = "..X." +
-               ".XX." +
-               "..X." +
+tetromino[4] = "..X."+
+               ".XX."+
+               "..X."+
                "...."; // T
 
-tetromino[5] = "...X" +
-               ".XXX" +
-               "...." +
+tetromino[5] = "...X"+
+               ".XXX"+
+               "...."+
                "...."; // L
 
 tetromino[6] = "X..." +
-               "XXX." +
-               "...." +
+               "XXX."+
+               "...."+
                "...."; // J
 
-// cores bonitinhas
 const colors = [
     "#000000",
     "#00BFFF",
-    "#3CB371",
-    "#FFA500",
-    "#FFD700",
-    "#BA55D3",
-    "#DC143C",
+    "#2ECC71",
+    "#FFB347",
+    "#F7DC6F",
+    "#AF7AC5",
+    "#E74C3C",
     "#FF69B4"
 ];
 
-// estado do jogo
 let currentPiece = 0;
 let currentRotation = 0;
 let currentX = 3;
@@ -165,18 +228,25 @@ let nextPiece = 0;
 
 let score = 0;
 let lines = 0;
-let fallInterval = 500;   // ms
+let fallInterval = 800;   // mais lento para criança
 let fallTimer = 0;
 let lastTime = 0;
 let gameOver = false;
 
-// "Oxêe!" ao limpar linha
+// "Oxêe!"
 let oxeTimer = 0;
-const OXE_DURATION = 800; // ms
+const OXE_DURATION = 800;
 
-// ===========================
-// Funções de rotação e encaixe
-// ===========================
+// controle de toque
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+
+// controle pra não girar muito rápido
+let lastRotateTime = 0;
+const ROTATE_COOLDOWN = 220; // ms
+
+// ==================== Funções base ====================
 function rotate(px, py, r) {
     switch (r % 4) {
         case 0: return py * 4 + px;
@@ -187,33 +257,26 @@ function rotate(px, py, r) {
     return 0;
 }
 
-function doesPieceFit(tet, rot, posX, posY) {
+function doesPieceFit(t, r, posX, posY) {
     for (let px = 0; px < 4; px++) {
         for (let py = 0; py < 4; py++) {
-            const pi = rotate(px, py, rot);
-            if (tetromino[tet][pi] === "X") {
+            const pi = rotate(px, py, r);
+            if (tetromino[t][pi] === "X") {
                 const fx = posX + px;
                 const fy = posY + py;
-
-                if (fx < 0 || fx >= W || fy < 0 || fy >= H)
-                    return false;
-
-                if (field[fy * W + fx] !== 0)
-                    return false;
+                if (fx < 0 || fx >= W || fy < 0 || fy >= H) return false;
+                if (field[fy * W + fx] !== 0) return false;
             }
         }
     }
     return true;
 }
 
-// ===========================
-// Inicializa jogo
-// ===========================
-function initGame() {
+function newGame() {
     field.fill(0);
     score = 0;
     lines = 0;
-    fallInterval = 500;
+    fallInterval = 800;
     fallTimer = 0;
     oxeTimer = 0;
     gameOver = false;
@@ -224,13 +287,12 @@ function initGame() {
     currentX = 3;
     currentY = 0;
 
-    scoreSpan.textContent = score;
-    linesSpan.textContent = lines;
+    scoreEl.textContent = score;
+    linesEl.textContent = lines;
 }
 
-// trava peça, checa linhas e gera nova
+// trava peça, verifica linhas, gera nova
 function lockPiece() {
-    // trava no campo
     for (let px = 0; px < 4; px++) {
         for (let py = 0; py < 4; py++) {
             const pi = rotate(px, py, currentRotation);
@@ -244,66 +306,70 @@ function lockPiece() {
         }
     }
 
-    // checa linhas cheias
     let cleared = 0;
     for (let y = 0; y < H; y++) {
         let full = true;
         for (let x = 0; x < W; x++) {
-            if (field[y * W + x] === 0) {
-                full = false;
-                break;
-            }
+            if (field[y * W + x] === 0) { full = false; break; }
         }
         if (full) {
             cleared++;
-            // desce tudo de cima
             for (let yy = y; yy > 0; yy--) {
                 for (let x = 0; x < W; x++) {
                     field[yy * W + x] = field[(yy - 1) * W + x];
                 }
             }
-            // linha de cima fica vazia
-            for (let x = 0; x < W; x++) {
-                field[x] = 0;
-            }
+            for (let x = 0; x < W; x++) field[x] = 0;
         }
     }
 
     if (cleared > 0) {
         lines += cleared;
-        // pontuação
         if (cleared === 1) score += 100;
         else if (cleared === 2) score += 300;
         else if (cleared === 3) score += 500;
         else score += 800;
 
-        scoreSpan.textContent = score;
-        linesSpan.textContent = lines;
+        scoreEl.textContent = score;
+        linesEl.textContent = lines;
 
         oxeTimer = OXE_DURATION;
-        if (fallInterval > 120) fallInterval -= 15;
+        if (fallInterval > 200) fallInterval -= 20;
     }
 
-    // nova peça
     currentPiece = nextPiece;
     nextPiece    = Math.floor(Math.random() * 7);
     currentRotation = 0;
     currentX = 3;
     currentY = 0;
 
-    if (!doesPieceFit(currentPiece, currentRotation, currentX, currentY)) {
+    if (!doesPieceFit(currentPiece, currentRotation, currentX, currentY))
         gameOver = true;
+}
+
+// desenha próxima peça
+function drawNextPiece() {
+    nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+    nextCtx.fillStyle = "#111";
+    nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+
+    const cell = 16;
+    for (let px = 0; px < 4; px++) {
+        for (let py = 0; py < 4; py++) {
+            const pi = rotate(px, py, 0);
+            if (tetromino[nextPiece][pi] === "X") {
+                nextCtx.fillStyle = colors[(nextPiece + 1) % colors.length];
+                nextCtx.fillRect(px * cell + 8, py * cell + 8, cell - 2, cell - 2);
+            }
+        }
     }
 }
 
-// ===========================
-// Desenho do jogo
-// ===========================
+// desenho geral
 function draw(dt) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // fundo
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // grade
@@ -350,17 +416,17 @@ function draw(dt) {
         }
     }
 
-    // "Oxêe!"
+    // Oxêe!
     if (oxeTimer > 0) {
         oxeTimer -= dt;
-        ctx.font = "28px Arial";
+        ctx.font = "26px Arial";
         ctx.fillStyle = "yellow";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("Oxêe!", canvas.width / 2, canvas.height / 2);
     }
 
-    // Game Over
+    // Game over
     if (gameOver) {
         ctx.fillStyle = "rgba(0,0,0,0.65)";
         ctx.fillRect(20, canvas.height / 2 - 40, canvas.width - 40, 80);
@@ -368,15 +434,15 @@ function draw(dt) {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.font = "20px Arial";
-        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 5);
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 6);
         ctx.font = "14px Arial";
-        ctx.fillText("Toque para reiniciar", canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillText("Toque para jogar de novo", canvas.width / 2, canvas.height / 2 + 18);
     }
+
+    drawNextPiece();
 }
 
-// ===========================
-// Loop principal
-// ===========================
+// loop principal
 function loop(timestamp) {
     const dt = lastTime ? (timestamp - lastTime) : 0;
     lastTime = timestamp;
@@ -385,11 +451,10 @@ function loop(timestamp) {
         fallTimer += dt;
         if (fallTimer >= fallInterval) {
             fallTimer = 0;
-            if (doesPieceFit(currentPiece, currentRotation, currentX, currentY + 1)) {
+            if (doesPieceFit(currentPiece, currentRotation, currentX, currentY + 1))
                 currentY++;
-            } else {
+            else
                 lockPiece();
-            }
         }
     }
 
@@ -397,79 +462,76 @@ function loop(timestamp) {
     requestAnimationFrame(loop);
 }
 
-// ===========================
-// CONTROLES POR TOQUE / SWIPE
-// ===========================
-let startX = 0;
-let startY = 0;
-
+// ==================== CONTROLES POR TOQUE ====================
 canvas.addEventListener("touchstart", (e) => {
     const t = e.touches[0];
-    startX = t.clientX;
-    startY = t.clientY;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchStartTime = performance.now();
 
-    // tenta iniciar música
     startMusic();
-});
+}, { passive: true });
 
 canvas.addEventListener("touchend", (e) => {
     const t = e.changedTouches[0];
-    const dx = t.clientX - startX;
-    const dy = t.clientY - startY;
-
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
+    const duration = performance.now() - touchStartTime;
 
-    // se estiver em GAME OVER -> reinicia
+    // game over -> qualquer toque inicia de novo
     if (gameOver) {
-        initGame();
+        newGame();
         return;
     }
 
-    // toque curto = girar
-    if (adx < 10 && ady < 10) {
-        const newRot = (currentRotation + 1) % 4;
-        if (doesPieceFit(currentPiece, newRot, currentX, currentY)) {
-            currentRotation = newRot;
+    const now = performance.now();
+
+    // TAP para girar: bem curtinho e quase sem mover
+    if (adx < 8 && ady < 8 && duration < 250) {
+        if (now - lastRotateTime >= ROTATE_COOLDOWN) {
+            const newRot = (currentRotation + 1) % 4;
+            if (doesPieceFit(currentPiece, newRot, currentX, currentY)) {
+                currentRotation = newRot;
+                lastRotateTime = now;
+            }
         }
         return;
     }
 
-    // predominância horizontal
+    // arrastar horizontal = mover
     if (adx > ady) {
-        if (dx > 15) { // direita
-            if (doesPieceFit(currentPiece, currentRotation, currentX + 1, currentY))
-                currentX++;
-        } else if (dx < -15) { // esquerda
-            if (doesPieceFit(currentPiece, currentRotation, currentX - 1, currentY))
-                currentX--;
-        }
+        if (dx > 15 && doesPieceFit(currentPiece, currentRotation, currentX + 1, currentY))
+            currentX++;
+        else if (dx < -15 && doesPieceFit(currentPiece, currentRotation, currentX - 1, currentY))
+            currentX--;
     } else {
-        // predominância vertical
-        if (dy > 15) { // arrastar para baixo
-            if (doesPieceFit(currentPiece, currentRotation, currentX, currentY + 1))
-                currentY++;
-        }
+        // arrastar para baixo = descer um passo
+        if (dy > 15 && doesPieceFit(currentPiece, currentRotation, currentX, currentY + 1))
+            currentY++;
     }
 });
 
-// clique com mouse (PC) também gira
+// clique (PC) também gira, mais devagar
 canvas.addEventListener("click", () => {
     startMusic();
     if (gameOver) {
-        initGame();
+        newGame();
         return;
     }
-    const newRot = (currentRotation + 1) % 4;
-    if (doesPieceFit(currentPiece, newRot, currentX, currentY)) {
-        currentRotation = newRot;
+    const now = performance.now();
+    if (now - lastRotateTime >= ROTATE_COOLDOWN) {
+        const newRot = (currentRotation + 1) % 4;
+        if (doesPieceFit(currentPiece, newRot, currentX, currentY)) {
+            currentRotation = newRot;
+            lastRotateTime = now;
+        }
     }
 });
 
-// ===========================
-// Início do jogo
-// ===========================
-initGame();
+// ==================== INÍCIO ====================
+newGame();
 requestAnimationFrame(loop);
 </script>
 </body>
