@@ -2,297 +2,475 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Tetris — Mobile</title>
+<title>Tetris Mobile - Luisa e Catharina</title>
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
 <style>
-*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+* {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+}
+body {
+    margin: 0;
+    background-color: #000;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
 
-body{
-    margin:0;
-    background:#000;
-    color:#fff;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    min-height:100vh;
-
-    background-image:url("background.png");
-    background-repeat:no-repeat;
-    background-position:center top;
-    background-size:contain;
+    /* FOTO DE FUNDO (arquivo background.png no GitHub) */
+    background-image: url("background.png");
+    background-repeat: no-repeat;
+    background-position: center top;
+    background-size: contain;
 }
 
-#menu{
-    position:fixed;
-    inset:0;
-    background:rgba(0,0,0,.8);
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    z-index:10;
+#game-container {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(0,0,0,0.55);
+    border-radius: 16px;
 }
 
-#menu-card{
-    padding:18px 20px;
-    border-radius:14px;
-    border:1px solid #fff;
-    background:rgba(0,0,0,.92);
-    text-align:center;
-    max-width:320px;
+#canvas {
+    display: block;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.5);
 }
 
-#menu-card h1{margin:0 0 8px;font-size:20px}
-#menu-card p{margin:4px 0;font-size:13px}
-#btn-start{
-    margin-top:10px;
-    width:100%;
-    padding:12px;
-    border:none;
-    border-radius:10px;
-    background:#2e7dff;
-    color:#fff;
-    font-size:17px;
-    font-weight:bold;
+#info {
+    margin-top: 4px;
+    text-align: center;
+    font-size: 13px;
+    opacity: 0.9;
 }
 
-#game{
-    margin-top:12px;
-    background:rgba(0,0,0,.55);
-    border-radius:14px;
-    padding:10px;
-}
-
-canvas{
-    border-radius:6px;
-    background:rgba(0,0,0,.4);
-}
-
-#info{
-    text-align:center;
-    margin-top:4px;
-    font-size:13px;
-    opacity:.9;
+#info-top {
+    margin-top: 4px;
+    text-align: center;
+    font-size: 13px;
+    opacity: 0.95;
 }
 </style>
 </head>
-
 <body>
 
-<div id="menu">
-    <div id="menu-card">
-        <h1>TETRIS — MOBILE</h1>
-        <p>Criado por: Luiz Carlos</p>
-        <p>Luisa e Catharina 💖</p>
-        <p style="margin-top:6px;">
-            Toque para girar<br>
-            Arraste para mover/baixar
-        </p>
-        <button id="btn-start">JOGAR</button>
-    </div>
+<div id="info-top">
+    Criado por: Luiz Carlos — Luisa e Catharina 💖<br>
+    Toque para girar · Arraste para mover/baixar
 </div>
 
-<div id="game">
-    <canvas id="canvas" width="320" height="480"></canvas>
+<div id="game-container">
+    <canvas id="canvas" width="240" height="480"></canvas>
     <div id="info">
         Score: <span id="score">0</span> — Linhas: <span id="lines">0</span>
     </div>
 </div>
 
 <script>
-// ----------------------
-// ÁUDIO
-// ----------------------
+// ===========================
+// ÁUDIO (toca no primeiro toque)
+// ===========================
 let bgm = new Audio("musica.mp3");
 bgm.loop = true;
+let musicStarted = false;
 
-// ----------------------
-// JOGO
-// ----------------------
-const W = 10, H = 20, S = 24;
-const cvs = document.getElementById("canvas");
-const ctx = cvs.getContext("2d");
-cvs.width = W*S; cvs.height = H*S;
-
-let field = new Array(W*H).fill(0);
-let pieces = [];
-
-pieces[0]="..X...X...X...X.";
-pieces[1]="..X..XX..X.......";
-pieces[2]=".X..XX...X.......";
-pieces[3]=".XX..XX..........";
-pieces[4]="..X..XX..X.......";
-pieces[5]="...X.XXX.........";
-pieces[6]="X...XXX..........";
-
-let cur,rot,x,y,next,score=0,lines=0;
-let fall=500, timer=0, last=0;
-let showOxe=0;
-
-function rotIdx(px,py,r){
-  switch(r%4){
-    case 0:return py*4+px;
-    case 1:return 12+py-(px*4);
-    case 2:return 15-(py*4)-px;
-    case 3:return 3-py+(px*4);
-  }
-}
-function fit(t,r,xx,yy){
-  for(let px=0;px<4;px++)
-    for(let py=0;py<4;py++){
-      let i=rotIdx(px,py,r);
-      if(pieces[t][i]==="X"){
-        let fx=xx+px, fy=yy+py;
-        if(fx<0||fx>=W||fy<0||fy>=H) return false;
-        if(field[fy*W+fx]) return false;
-      }
+function startMusic() {
+    if (!musicStarted) {
+        musicStarted = true;
+        bgm.play().catch(() => {
+            // se falhar, deixa para tentar de novo no próximo toque
+            musicStarted = false;
+        });
     }
-  return true;
-}
-function newGame(){
-  field.fill(0); score=lines=0; fall=500;
-  cur=Math.floor(Math.random()*7);
-  next=Math.floor(Math.random()*7);
-  rot=0; x=3; y=0; showOxe=0;
-  document.getElementById("score").textContent=0;
-  document.getElementById("lines").textContent=0;
 }
 
-function lockPiece(){
-  for(let px=0;px<4;px++)
-    for(let py=0;py<4;py++){
-      if(pieces[cur][rotIdx(px,py,rot)]==="X"){
-        let fx=x+px, fy=y+py;
-        if(fy>=0&&fy<H) field[fy*W+fx]=cur+1;
-      }
+// ===========================
+// CONFIGURAÇÃO DO TETRIS
+// ===========================
+const W = 10;          // largura em blocos
+const H = 20;          // altura em blocos
+const S = 24;          // tamanho de cada bloco em pixels
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+// ajusta o canvas exatamente ao tamanho do campo
+canvas.width  = W * S;
+canvas.height = H * S;
+
+const scoreSpan = document.getElementById("score");
+const linesSpan = document.getElementById("lines");
+
+// campo e peças
+let field = new Array(W * H).fill(0);
+let tetromino = [];
+
+// peças (4x4)
+tetromino[0] = "..X." +
+               "..X." +
+               "..X." +
+               "..X."; // I
+
+tetromino[1] = "..X." +
+               ".XX." +
+               ".X.." +
+               "...."; // S
+
+tetromino[2] = ".X.." +
+               ".XX." +
+               "..X." +
+               "...."; // Z
+
+tetromino[3] = "...." +
+               ".XX." +
+               ".XX." +
+               "...."; // O
+
+tetromino[4] = "..X." +
+               ".XX." +
+               "..X." +
+               "...."; // T
+
+tetromino[5] = "...X" +
+               ".XXX" +
+               "...." +
+               "...."; // L
+
+tetromino[6] = "X..." +
+               "XXX." +
+               "...." +
+               "...."; // J
+
+// cores bonitinhas
+const colors = [
+    "#000000",
+    "#00BFFF",
+    "#3CB371",
+    "#FFA500",
+    "#FFD700",
+    "#BA55D3",
+    "#DC143C",
+    "#FF69B4"
+];
+
+// estado do jogo
+let currentPiece = 0;
+let currentRotation = 0;
+let currentX = 3;
+let currentY = 0;
+let nextPiece = 0;
+
+let score = 0;
+let lines = 0;
+let fallInterval = 500;   // ms
+let fallTimer = 0;
+let lastTime = 0;
+let gameOver = false;
+
+// "Oxêe!" ao limpar linha
+let oxeTimer = 0;
+const OXE_DURATION = 800; // ms
+
+// ===========================
+// Funções de rotação e encaixe
+// ===========================
+function rotate(px, py, r) {
+    switch (r % 4) {
+        case 0: return py * 4 + px;
+        case 1: return 12 + py - (px * 4);
+        case 2: return 15 - (py * 4) - px;
+        case 3: return 3 - py + (px * 4);
     }
-  let cleared=0;
-  for(let yy=0;yy<H;yy++){
-    let full=true;
-    for(let xx=0;xx<W;xx++)
-      if(!field[yy*W+xx]){full=false;break;}
-    if(full){
-      cleared++;
-      for(let k=yy;k>0;k--)
-        for(let xx=0;xx<W;xx++)
-          field[k*W+xx]=field[(k-1)*W+xx];
-      for(let xx=0;xx<W;xx++) field[xx]=0;
-    }
-  }
-  if(cleared){
-    lines+=cleared;
-    score+=cleared===1?100:cleared===2?300:cleared===3?500:800;
-    document.getElementById("score").textContent=score;
-    document.getElementById("lines").textContent=lines;
-    showOxe=700;
-    if(fall>120) fall-=12;
-  }
-  cur=next; next=Math.floor(Math.random()*7);
-  rot=0; x=3; y=0;
-  if(!fit(cur,rot,x,y)) gameOver=true;
+    return 0;
 }
 
-function draw(dt){
-  ctx.clearRect(0,0,cvs.width,cvs.height);
-  ctx.fillStyle="rgba(0,0,0,.45)";
-  ctx.fillRect(0,0,cvs.width,cvs.height);
+function doesPieceFit(tet, rot, posX, posY) {
+    for (let px = 0; px < 4; px++) {
+        for (let py = 0; py < 4; py++) {
+            const pi = rotate(px, py, rot);
+            if (tetromino[tet][pi] === "X") {
+                const fx = posX + px;
+                const fy = posY + py;
 
-  for(let yy=0;yy<H;yy++)
-    for(let xx=0;xx<W;xx++){
-      let v=field[yy*W+xx];
-      if(v){ctx.fillStyle=["#0ff","#0f0","#fa0","#ff0","#c0f","#f33","#f6c"][v%7];
-        ctx.fillRect(xx*S+1,yy*S+1,S-2,S-2);}
-    }
+                if (fx < 0 || fx >= W || fy < 0 || fy >= H)
+                    return false;
 
-  if(!gameOver)
-    for(let px=0;px<4;px++)
-      for(let py=0;py<4;py++)
-        if(pieces[cur][rotIdx(px,py,rot)]==="X"){
-          ctx.fillStyle=["#0ff","#0f0","#fa0","#ff0","#c0f","#f33","#f6c"][ (cur+1)%7 ];
-          ctx.fillRect((x+px)*S+1,(y+py)*S+1,S-2,S-2);
+                if (field[fy * W + fx] !== 0)
+                    return false;
+            }
         }
-
-  if(showOxe>0){
-    showOxe-=dt;
-    ctx.font="30px Arial";
-    ctx.fillStyle="yellow";
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
-    ctx.fillText("Oxêe!",cvs.width/2,cvs.height/2);
-  }
-
-  if(gameOver){
-    ctx.fillStyle="rgba(0,0,0,.6)";
-    ctx.fillRect(20,180,cvs.width-40,80);
-    ctx.fillStyle="#fff"; ctx.textAlign="center";
-    ctx.font="20px Arial";
-    ctx.fillText("GAME OVER",cvs.width/2,205);
-    ctx.font="14px Arial";
-    ctx.fillText("Toque em JOGAR para reiniciar",cvs.width/2,235);
-  }
-}
-
-let gameOver=false;
-function loop(t){
-  let dt=t-last; last=t;
-  if(!gameOver){
-    timer+=dt;
-    if(timer>=fall){
-      timer=0;
-      if(fit(cur,rot,x,y+1)) y++;
-      else lockPiece();
     }
-  }
-  draw(dt);
-  requestAnimationFrame(loop);
+    return true;
 }
 
-// ----------------------
-// TOQUE / GESTOS MOBILE
-// ----------------------
-let sx=0, sy=0;
+// ===========================
+// Inicializa jogo
+// ===========================
+function initGame() {
+    field.fill(0);
+    score = 0;
+    lines = 0;
+    fallInterval = 500;
+    fallTimer = 0;
+    oxeTimer = 0;
+    gameOver = false;
 
-cvs.addEventListener("touchstart",e=>{
-  let t=e.touches[0];
-  sx=t.clientX; sy=t.clientY;
+    currentPiece = Math.floor(Math.random() * 7);
+    nextPiece    = Math.floor(Math.random() * 7);
+    currentRotation = 0;
+    currentX = 3;
+    currentY = 0;
+
+    scoreSpan.textContent = score;
+    linesSpan.textContent = lines;
+}
+
+// trava peça, checa linhas e gera nova
+function lockPiece() {
+    // trava no campo
+    for (let px = 0; px < 4; px++) {
+        for (let py = 0; py < 4; py++) {
+            const pi = rotate(px, py, currentRotation);
+            if (tetromino[currentPiece][pi] === "X") {
+                const fx = currentX + px;
+                const fy = currentY + py;
+                if (fx >= 0 && fx < W && fy >= 0 && fy < H) {
+                    field[fy * W + fx] = currentPiece + 1;
+                }
+            }
+        }
+    }
+
+    // checa linhas cheias
+    let cleared = 0;
+    for (let y = 0; y < H; y++) {
+        let full = true;
+        for (let x = 0; x < W; x++) {
+            if (field[y * W + x] === 0) {
+                full = false;
+                break;
+            }
+        }
+        if (full) {
+            cleared++;
+            // desce tudo de cima
+            for (let yy = y; yy > 0; yy--) {
+                for (let x = 0; x < W; x++) {
+                    field[yy * W + x] = field[(yy - 1) * W + x];
+                }
+            }
+            // linha de cima fica vazia
+            for (let x = 0; x < W; x++) {
+                field[x] = 0;
+            }
+        }
+    }
+
+    if (cleared > 0) {
+        lines += cleared;
+        // pontuação
+        if (cleared === 1) score += 100;
+        else if (cleared === 2) score += 300;
+        else if (cleared === 3) score += 500;
+        else score += 800;
+
+        scoreSpan.textContent = score;
+        linesSpan.textContent = lines;
+
+        oxeTimer = OXE_DURATION;
+        if (fallInterval > 120) fallInterval -= 15;
+    }
+
+    // nova peça
+    currentPiece = nextPiece;
+    nextPiece    = Math.floor(Math.random() * 7);
+    currentRotation = 0;
+    currentX = 3;
+    currentY = 0;
+
+    if (!doesPieceFit(currentPiece, currentRotation, currentX, currentY)) {
+        gameOver = true;
+    }
+}
+
+// ===========================
+// Desenho do jogo
+// ===========================
+function draw(dt) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // fundo
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // grade
+    ctx.strokeStyle = "rgba(230,230,230,0.25)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * S, 0);
+        ctx.lineTo(x * S, H * S);
+        ctx.stroke();
+    }
+    for (let y = 0; y <= H; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * S);
+        ctx.lineTo(W * S, y * S);
+        ctx.stroke();
+    }
+
+    // blocos travados
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const v = field[y * W + x];
+            if (v > 0) {
+                ctx.fillStyle = colors[v % colors.length];
+                ctx.fillRect(x * S + 1, y * S + 1, S - 2, S - 2);
+            }
+        }
+    }
+
+    // peça atual
+    if (!gameOver) {
+        for (let px = 0; px < 4; px++) {
+            for (let py = 0; py < 4; py++) {
+                const pi = rotate(px, py, currentRotation);
+                if (tetromino[currentPiece][pi] === "X") {
+                    const gx = currentX + px;
+                    const gy = currentY + py;
+                    if (gx >= 0 && gx < W && gy >= 0 && gy < H) {
+                        ctx.fillStyle = colors[(currentPiece + 1) % colors.length];
+                        ctx.fillRect(gx * S + 1, gy * S + 1, S - 2, S - 2);
+                    }
+                }
+            }
+        }
+    }
+
+    // "Oxêe!"
+    if (oxeTimer > 0) {
+        oxeTimer -= dt;
+        ctx.font = "28px Arial";
+        ctx.fillStyle = "yellow";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Oxêe!", canvas.width / 2, canvas.height / 2);
+    }
+
+    // Game Over
+    if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.fillRect(20, canvas.height / 2 - 40, canvas.width - 40, 80);
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "20px Arial";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 5);
+        ctx.font = "14px Arial";
+        ctx.fillText("Toque para reiniciar", canvas.width / 2, canvas.height / 2 + 20);
+    }
+}
+
+// ===========================
+// Loop principal
+// ===========================
+function loop(timestamp) {
+    const dt = lastTime ? (timestamp - lastTime) : 0;
+    lastTime = timestamp;
+
+    if (!gameOver) {
+        fallTimer += dt;
+        if (fallTimer >= fallInterval) {
+            fallTimer = 0;
+            if (doesPieceFit(currentPiece, currentRotation, currentX, currentY + 1)) {
+                currentY++;
+            } else {
+                lockPiece();
+            }
+        }
+    }
+
+    draw(dt);
+    requestAnimationFrame(loop);
+}
+
+// ===========================
+// CONTROLES POR TOQUE / SWIPE
+// ===========================
+let startX = 0;
+let startY = 0;
+
+canvas.addEventListener("touchstart", (e) => {
+    const t = e.touches[0];
+    startX = t.clientX;
+    startY = t.clientY;
+
+    // tenta iniciar música
+    startMusic();
 });
 
-cvs.addEventListener("touchend",e=>{
-  let t=e.changedTouches[0];
-  let dx=t.clientX-sx, dy=t.clientY-sy;
+canvas.addEventListener("touchend", (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
 
-  let adx=Math.abs(dx), ady=Math.abs(dy);
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
 
-  // toque curto = girar
-  if(adx<10 && ady<10){
-    let r=(rot+1)%4;
-    if(fit(cur,r,x,y)) rot=r;
-    return;
-  }
+    // se estiver em GAME OVER -> reinicia
+    if (gameOver) {
+        initGame();
+        return;
+    }
 
-  // arrastar horizontal
-  if(adx>ady){
-    if(dx>15 && fit(cur,rot,x+1,y)) x++;
-    if(dx<-15 && fit(cur,rot,x-1,y)) x--;
-  }else{
-    // arrastar para baixo
-    if(dy>15 && fit(cur,rot,x,y+1)) y++;
-  }
+    // toque curto = girar
+    if (adx < 10 && ady < 10) {
+        const newRot = (currentRotation + 1) % 4;
+        if (doesPieceFit(currentPiece, newRot, currentX, currentY)) {
+            currentRotation = newRot;
+        }
+        return;
+    }
+
+    // predominância horizontal
+    if (adx > ady) {
+        if (dx > 15) { // direita
+            if (doesPieceFit(currentPiece, currentRotation, currentX + 1, currentY))
+                currentX++;
+        } else if (dx < -15) { // esquerda
+            if (doesPieceFit(currentPiece, currentRotation, currentX - 1, currentY))
+                currentX--;
+        }
+    } else {
+        // predominância vertical
+        if (dy > 15) { // arrastar para baixo
+            if (doesPieceFit(currentPiece, currentRotation, currentX, currentY + 1))
+                currentY++;
+        }
+    }
 });
 
-// ----------------------
-// MENU
-// ----------------------
-document.getElementById("btn-start").onclick=()=>{
-  document.getElementById("menu").style.display="none";
-  newGame();
-  gameOver=false;
-  bgm.play().catch(()=>{});
-};
+// clique com mouse (PC) também gira
+canvas.addEventListener("click", () => {
+    startMusic();
+    if (gameOver) {
+        initGame();
+        return;
+    }
+    const newRot = (currentRotation + 1) % 4;
+    if (doesPieceFit(currentPiece, newRot, currentX, currentY)) {
+        currentRotation = newRot;
+    }
+});
 
+// ===========================
+// Início do jogo
+// ===========================
+initGame();
 requestAnimationFrame(loop);
 </script>
-
 </body>
 </html>
